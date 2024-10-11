@@ -1,61 +1,62 @@
-'use client'
+"use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import axios from 'axios';
 
-export default function TransactionForm({ onNewTransaction }) {
-  const [address, setAddress] = useState('');
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+interface SensorReading {
+  temperature: number;
+  humidity: number;
+  timestamp: string;
+}
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      const response = await axios.post('/api/send-iota', { address, message });
-      // Create a new object with only the necessary properties
-      const transactionData = {
-        hash: response.data.hash,
-        address: response.data.address,
-        message: response.data.message,
-        timestamp: new Date().toISOString()
-      };
-      onNewTransaction(transactionData);
-      setAddress('');
-      setMessage('');
-    } catch (error) {
-      console.error('Error sending transaction:', error.message);
-    } finally {
-      setIsLoading(false);
+interface SensorDataProps {
+  data: SensorReading[];
+  onNewData: (data: SensorReading) => void;
+}
+
+export default function SensorData({ data = [], onNewData }: SensorDataProps) {
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isSimulating) {
+      interval = setInterval(async () => {
+        try {
+          const response = await axios.get<SensorReading>('/api/sensor-data');
+          onNewData(response.data);
+        } catch (error) {
+          console.error('Error fetching sensor data:', error);
+        }
+      }, 5000);
     }
+    return () => clearInterval(interval);
+  }, [isSimulating, onNewData]);
+
+  const toggleSimulation = () => {
+    setIsSimulating(!isSimulating);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <Label htmlFor="address">Address</Label>
-        <Input
-          id="address"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          required
-        />
-      </div>
-      <div>
-        <Label htmlFor="message">Message</Label>
-        <Input
-          id="message"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          required
-        />
-      </div>
-      <Button type="submit" disabled={isLoading}>
-        {isLoading ? 'Sending...' : 'Send Transaction'}
+    <div>
+      <Button onClick={toggleSimulation}>
+        {isSimulating ? 'Stop Simulation' : 'Start Simulation'}
       </Button>
-    </form>
+      <div className="mt-4 h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="timestamp" />
+            <YAxis yAxisId="left" />
+            <YAxis yAxisId="right" orientation="right" />
+            <Tooltip />
+            <Legend />
+            <Line yAxisId="left" type="monotone" dataKey="temperature" stroke="#8884d8" />
+            <Line yAxisId="right" type="monotone" dataKey="humidity" stroke="#82ca9d" />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
   );
 }
